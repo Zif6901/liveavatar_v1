@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Showcase Virtual Coworker (FULL Mode - Low Latency)</title>
+    <title>Device Showcase Virtual Coworker (Zero Latency)</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <style>
         body { 
@@ -185,10 +185,21 @@
             }
         }
 
+        // --- UPDATED LOGGING WITH TIMESTAMPS ---
         function logToConsole(message) {
             const log = document.getElementById('transcriptLog');
-            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fraction: '3-digit' });
-            log.value += `[${timestamp}] ${message}\n`;
+            // Format: HH:MM:SS.mmm (High precision for debugging latency)
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+            const entry = `[${timeString}] ${message}\n`;
+            
+            log.value += entry;
             log.scrollTop = log.scrollHeight; 
             console.log(message);
         }
@@ -272,7 +283,6 @@
                         const jsonData = JSON.parse(strData);
                         
                         // CAPTURE SESSION ID
-                        // We must capture the session ID from initial events to send commands back
                         if (jsonData.session_id) {
                             if (currentSessionId !== jsonData.session_id) {
                                 currentSessionId = jsonData.session_id;
@@ -340,30 +350,34 @@
             if (event.key === "Enter") sendTextCommand();
         }
 
-        // --- OPTIMIZED SEND STRATEGY (FULL MODE - LOW LATENCY) ---
-        // 1. Sends 'avatar.interrupt' to clear previous audio/buffers immediately
-        // 2. Sends 'avatar.speak_response' to trigger immediate LLM generation
-        // 3. Publishes to 'agent-control' topic as required by docs
+        // --- UPDATED SEND STRATEGY (ZERO LATENCY) ---
+        // 1. HARD MUTE MIC: Forces the VAD (Voice Activity Detection) to close the 'user speaking' window instantly.
+        // 2. INTERRUPT: Clears the server-side audio buffer.
+        // 3. SEND TEXT: Dispatches the prompt immediately.
         async function sendTextCommand() {
             const inputField = document.getElementById('textCommand');
             const text = inputField.value.trim();
             if (!text || !currentRoom) return;
 
-            // Ensure we have a session ID
             if (!currentSessionId) {
                 logToConsole("[WARN] No Session ID captured yet. Command might fail.");
-                // We proceed anyway as it might have been missed in logs but exists in state
             }
 
             setProcessing(true); 
             logToConsole(`[USER-INPUT] Sending: "${text}"`);
 
             try {
-                const encoder = new TextEncoder();
-                const topic = "agent-control"; // Topic required by FULL Mode Events doc 
+                // LATENCY FIX 1: Temporarily Mute Mic to kill background noise/VAD tail
+                const wasMicEnabled = currentRoom.localParticipant.isMicrophoneEnabled;
+                if (wasMicEnabled) {
+                    await currentRoom.localParticipant.setMicrophoneEnabled(false);
+                    logToConsole(`[SYSTEM] Mic auto-muted for latency optimization`);
+                }
 
-                // STEP 1: Send Interrupt 
-                // This stops any current speaking or listening logic immediately
+                const encoder = new TextEncoder();
+                const topic = "agent-control"; 
+
+                // LATENCY FIX 2: Send Interrupt to clear server queues 
                 const payloadInterrupt = JSON.stringify({ 
                     event_type: "avatar.interrupt", 
                     session_id: currentSessionId 
@@ -373,13 +387,11 @@
                     encoder.encode(payloadInterrupt), 
                     { reliable: true, topic: topic }
                 );
-                logToConsole(`[SENT] Interrupt (Cleared buffers)`);
 
-                // Small buffer to ensure ordering (optional but recommended)
+                // Small delay to ensure interrupt processes
                 await new Promise(r => setTimeout(r, 50));
 
-                // STEP 2: Send Text Response Command [cite: 70]
-                // Instructs the LLM to generate a response
+                // STEP 3: Send Text Response Command 
                 const payloadResponse = JSON.stringify({ 
                     event_type: "avatar.speak_response", 
                     text: text,
@@ -393,6 +405,18 @@
                 
                 logToConsole(`[SENT] Command: avatar.speak_response`);
                 inputField.value = "";
+
+                // Restore Mic State after short delay (allowing response to start)
+                if (wasMicEnabled) {
+                    setTimeout(async () => {
+                        try {
+                            if (currentRoom) {
+                                await currentRoom.localParticipant.setMicrophoneEnabled(true);
+                                logToConsole(`[SYSTEM] Mic auto-restored`);
+                            }
+                        } catch(e) { logToConsole("[WARN] Failed to restore mic"); }
+                    }, 1000); 
+                }
                 
             } catch (e) {
                 logToConsole(`[ERROR] Send Failed: ${e.message}`);
