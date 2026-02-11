@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Showcase Virtual Coworker (FULL Mode)</title>
+    <title>Device Showcase Virtual Coworker (FULL Mode - Low Latency)</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <style>
         body { 
@@ -272,6 +272,7 @@
                         const jsonData = JSON.parse(strData);
                         
                         // CAPTURE SESSION ID
+                        // We must capture the session ID from initial events to send commands back
                         if (jsonData.session_id) {
                             if (currentSessionId !== jsonData.session_id) {
                                 currentSessionId = jsonData.session_id;
@@ -339,16 +340,19 @@
             if (event.key === "Enter") sendTextCommand();
         }
 
-        // --- UPDATED SEND STRATEGY (FULL MODE) ---
-        // Sends direct avatar.speak_response command to agent-control topic
+        // --- OPTIMIZED SEND STRATEGY (FULL MODE - LOW LATENCY) ---
+        // 1. Sends 'avatar.interrupt' to clear previous audio/buffers immediately
+        // 2. Sends 'avatar.speak_response' to trigger immediate LLM generation
+        // 3. Publishes to 'agent-control' topic as required by docs
         async function sendTextCommand() {
             const inputField = document.getElementById('textCommand');
             const text = inputField.value.trim();
             if (!text || !currentRoom) return;
 
+            // Ensure we have a session ID
             if (!currentSessionId) {
-                logToConsole("[WARN] No Session ID! Command may fail. Waiting for session_id...");
-                // In production, you might want to wait or fetch this, but we'll proceed hoping it's cached or irrelevant
+                logToConsole("[WARN] No Session ID captured yet. Command might fail.");
+                // We proceed anyway as it might have been missed in logs but exists in state
             }
 
             setProcessing(true); 
@@ -356,28 +360,38 @@
 
             try {
                 const encoder = new TextEncoder();
+                const topic = "agent-control"; // Topic required by FULL Mode Events doc 
+
+                // STEP 1: Send Interrupt 
+                // This stops any current speaking or listening logic immediately
+                const payloadInterrupt = JSON.stringify({ 
+                    event_type: "avatar.interrupt", 
+                    session_id: currentSessionId 
+                });
                 
-                // Construct Payload based on FULL Mode Events Documentation
-                //  Use avatar.speak_response to trigger LLM response
-                // [cite: 62] Structure requires event_type and session_id
-                const payload = JSON.stringify({ 
+                await currentRoom.localParticipant.publishData(
+                    encoder.encode(payloadInterrupt), 
+                    { reliable: true, topic: topic }
+                );
+                logToConsole(`[SENT] Interrupt (Cleared buffers)`);
+
+                // Small buffer to ensure ordering (optional but recommended)
+                await new Promise(r => setTimeout(r, 50));
+
+                // STEP 2: Send Text Response Command [cite: 70]
+                // Instructs the LLM to generate a response
+                const payloadResponse = JSON.stringify({ 
                     event_type: "avatar.speak_response", 
                     text: text,
                     session_id: currentSessionId
                 });
 
-                // Publish to 'agent-control' topic
-                //  Command events need to be published to topic: agent-control
                 await currentRoom.localParticipant.publishData(
-                    encoder.encode(payload), 
-                    { 
-                        reliable: true,
-                        topic: "agent-control" 
-                    }
+                    encoder.encode(payloadResponse), 
+                    { reliable: true, topic: topic }
                 );
                 
-                logToConsole(`[SENT] Command: avatar.speak_response (Topic: agent-control)`);
-
+                logToConsole(`[SENT] Command: avatar.speak_response`);
                 inputField.value = "";
                 
             } catch (e) {
