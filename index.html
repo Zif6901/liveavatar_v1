@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Showcase Virtual Coworker (FULL Mode)</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 40px; 
+            background-color: #f5f5f7;
+        }
+        h1 { margin-bottom: 20px; color: #333; }
+        
+        #processing-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px; 
+            background: linear-gradient(90deg, #0070f3, #00c6ff);
+            z-index: 1000;
+            display: none; 
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        #processing-text {
+            position: fixed;
+            top: 15px;
+            background: rgba(0, 112, 243, 0.9);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1001;
+            display: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        #video-container { 
+            width: 100%; 
+            max-width: 800px; 
+            aspect-ratio: 16/9; 
+            background: #000; 
+            margin-top: 20px; 
+            position: relative; 
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        video, audio { width: 100%; height: 100%; object-fit: cover; }
+
+        .controls { 
+            background: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; gap: 10px; align-items: center;
+        }
+        
+        button { 
+            padding: 10px 20px; cursor: pointer; background-color: #0070f3; color: white;
+            border: none; border-radius: 4px; font-weight: 600;
+        }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button#disconnectBtn { background-color: #e00; }
+        button.active-mic { background-color: #e00; }
+
+        .transcript-container {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .transcript-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        textarea#transcriptLog {
+            width: 100%;
+            height: 300px; 
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px; 
+            line-height: 1.5;
+            resize: vertical;
+            background-color: #1e1e1e; 
+            color: #0f0; 
+            white-space: pre-wrap; 
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        
+        input#textCommand {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        #status { margin-top: 15px; color: #666; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <div id="processing-bar"></div>
+    <div id="processing-text">Processing...</div>
+
+    <h1>Device Showcase Virtual Coworker</h1>
+    
+    <div class="controls">
+        <button onclick="initSession()" id="connectBtn">Start & Connect</button>
+        <button onclick="toggleMic()" disabled id="micBtn">Mic On/Off</button>
+        <button onclick="disconnect()" disabled id="disconnectBtn">Disconnect</button>
+    </div>
+
+    <div id="status">Ready to connect...</div>
+    <div id="video-container"></div>
+
+    <div class="transcript-container">
+        <div class="transcript-header">
+            <h3>Debug Log & Transcript</h3>
+            <button onclick="downloadTranscript()" style="background-color:#28a745; padding:8px 16px; font-size:14px;">Download Log</button>
+        </div>
+        <textarea id="transcriptLog" readonly placeholder="System logs will appear here..."></textarea>
+        
+        <div class="input-group">
+            <input type="text" id="textCommand" placeholder="Type a command..." onkeypress="handleInputKey(event)">
+            <button onclick="sendTextCommand()" id="sendBtn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        let currentRoom = null;
+        let processingTimeout = null;
+        let agentAudioInterval = null;
+        let currentSessionId = null; 
+        
+        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
+
+        function setProcessing(isProcessing) {
+            const bar = document.getElementById('processing-bar');
+            const txt = document.getElementById('processing-text');
+            if (processingTimeout) clearTimeout(processingTimeout);
+
+            if (isProcessing) {
+                bar.style.display = 'block';
+                txt.style.display = 'block';
+                updateStatus("Processing user input...");
+                processingTimeout = setTimeout(() => {
+                    if (bar.style.display === 'block') {
+                        setProcessing(false);
+                        logToConsole("[WARN] Processing timed out. No response detected.");
+                    }
+                }, 15000);
+            } else {
+                bar.style.display = 'none';
+                txt.style.display = 'none';
+                updateStatus("Connected & Listening");
+            }
+        }
+
+        function logToConsole(message) {
+            const log = document.getElementById('transcriptLog');
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fraction: '3-digit' });
+            log.value += `[${timestamp}] ${message}\n`;
+            log.scrollTop = log.scrollHeight; 
+            console.log(message);
+        }
+
+        function downloadTranscript() {
+            const content = document.getElementById('transcriptLog').value;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `debug_log.txt`;
+            a.click();
+        }
+
+        async function initSession() {
+            if (currentRoom) return;
+            document.getElementById('connectBtn').disabled = true;
+            updateStatus("Requesting Token...");
+            document.getElementById('transcriptLog').value = ""; 
+            currentSessionId = null; 
+            logToConsole("[SYSTEM] Starting Session Init...");
+
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    const ctx = new AudioContext();
+                    await ctx.resume();
+                    ctx.close();
+                }
+
+                const slResponse = await fetch(SNAPLOGIC_URL);
+                if (!slResponse.ok) throw new Error("SnapLogic Error: " + slResponse.status);
+                const slData = await slResponse.json();
+                const sessionToken = slData[0]?.session_token;
+                
+                if (!sessionToken) throw new Error("No session token.");
+                logToConsole("[SYSTEM] Token Received. Calling Avatar API...");
+
+                const response = await fetch('https://api.liveavatar.com/v1/sessions/start', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + sessionToken, 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) throw new Error("Avatar API Error: " + response.status);
+                const data = await response.json();
+                const innerData = data.data || data; 
+                
+                await connectToLiveKit(innerData.livekit_url, innerData.livekit_client_token);
+
+            } catch (error) {
+                logToConsole(`[ERROR] Init Failed: ${error.message}`);
+                updateStatus("Error: " + error.message);
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        async function connectToLiveKit(url, token) {
+            updateStatus("Connecting to Room...");
+            try {
+                currentRoom = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+
+                currentRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    document.getElementById('video-container').appendChild(track.attach());
+                    logToConsole(`[ROOM] Track Subscribed: ${track.kind}`);
+                    if (track.kind === LivekitClient.Track.Kind.Audio) {
+                        const element = track.attach();
+                        element.onplay = () => {
+                            logToConsole("[AUDIO] Agent audio started playing.");
+                            setProcessing(false);
+                        };
+                        startAgentAudioMonitoring(participant);
+                    }
+                });
+
+                currentRoom.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+                    const decoder = new TextDecoder();
+                    const strData = decoder.decode(payload);
+                    logToConsole(`[RECEIVED] Topic: "${topic}" | Data: ${strData}`);
+                    
+                    try {
+                        const jsonData = JSON.parse(strData);
+                        
+                        // CAPTURE SESSION ID
+                        if (jsonData.session_id) {
+                            if (currentSessionId !== jsonData.session_id) {
+                                currentSessionId = jsonData.session_id;
+                                logToConsole(`[SYSTEM] Session ID Captured: ${currentSessionId}`);
+                            }
+                        }
+
+                        // Stop processing on ANY agent activity
+                        if (jsonData.event_type && (jsonData.event_type.startsWith('avatar') || jsonData.event_type.startsWith('agent'))) {
+                            setProcessing(false);
+                        }
+                        
+                        if (jsonData.event_type === "avatar.transcription") {
+                            logToConsole(`[AI EDDIE]: "${jsonData.text}"`);
+                        }
+                    } catch(e) {}
+                });
+                
+                currentRoom.on(LivekitClient.RoomEvent.Connected, () => logToConsole("[ROOM] Connected"));
+                currentRoom.on(LivekitClient.RoomEvent.Disconnected, () => logToConsole("[ROOM] Disconnected"));
+
+                await currentRoom.connect(url, token);
+                
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('micBtn').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+
+                try {
+                    await currentRoom.localParticipant.setMicrophoneEnabled(true);
+                    document.getElementById('micBtn').classList.add("active-mic");
+                    updateStatus("Connected & Mic Live");
+                } catch(e) {
+                    updateStatus("Connected (Mic manual start required)");
+                }
+
+            } catch (error) {
+                logToConsole(`[ERROR] Connection Failed: ${error.message}`);
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        function startAgentAudioMonitoring(participant) {
+            if (agentAudioInterval) clearInterval(agentAudioInterval);
+            agentAudioInterval = setInterval(() => {
+                if (!participant) return;
+                if (participant.audioLevel > 0.01) setProcessing(false);
+            }, 100);
+        }
+
+        async function toggleMic() {
+            if (!currentRoom) return;
+            const btn = document.getElementById('micBtn');
+            const isEnabled = currentRoom.localParticipant.isMicrophoneEnabled;
+            await currentRoom.localParticipant.setMicrophoneEnabled(!isEnabled);
+            if (!isEnabled) {
+                btn.classList.add("active-mic");
+                logToConsole("[USER] Mic Unmuted");
+            } else {
+                btn.classList.remove("active-mic");
+                logToConsole("[USER] Mic Muted");
+            }
+        }
+
+        function handleInputKey(event) {
+            if (event.key === "Enter") sendTextCommand();
+        }
+
+        // --- UPDATED SEND STRATEGY (FULL MODE) ---
+        // Sends direct avatar.speak_response command to agent-control topic
+        async function sendTextCommand() {
+            const inputField = document.getElementById('textCommand');
+            const text = inputField.value.trim();
+            if (!text || !currentRoom) return;
+
+            if (!currentSessionId) {
+                logToConsole("[WARN] No Session ID! Command may fail. Waiting for session_id...");
+                // In production, you might want to wait or fetch this, but we'll proceed hoping it's cached or irrelevant
+            }
+
+            setProcessing(true); 
+            logToConsole(`[USER-INPUT] Sending: "${text}"`);
+
+            try {
+                const encoder = new TextEncoder();
+                
+                // Construct Payload based on FULL Mode Events Documentation
+                //  Use avatar.speak_response to trigger LLM response
+                // [cite: 62] Structure requires event_type and session_id
+                const payload = JSON.stringify({ 
+                    event_type: "avatar.speak_response", 
+                    text: text,
+                    session_id: currentSessionId
+                });
+
+                // Publish to 'agent-control' topic
+                //  Command events need to be published to topic: agent-control
+                await currentRoom.localParticipant.publishData(
+                    encoder.encode(payload), 
+                    { 
+                        reliable: true,
+                        topic: "agent-control" 
+                    }
+                );
+                
+                logToConsole(`[SENT] Command: avatar.speak_response (Topic: agent-control)`);
+
+                inputField.value = "";
+                
+            } catch (e) {
+                logToConsole(`[ERROR] Send Failed: ${e.message}`);
+                setProcessing(false);
+            }
+        }
+
+        async function disconnect() {
+            logToConsole("[USER] Disconnecting...");
+            if (currentRoom) await currentRoom.disconnect();
+            if (agentAudioInterval) clearInterval(agentAudioInterval);
+            setProcessing(false);
+            document.getElementById('video-container').innerHTML = '';
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            document.getElementById('micBtn').classList.remove("active-mic");
+            document.getElementById('micBtn').disabled = true;
+            document.getElementById('connectBtn').disabled = false;
+            currentRoom = null;
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status').innerText = msg;
+        }
+    </script>
+</body>
+</html>
