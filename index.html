@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Showcase Virtual Coworker (Zero Latency)</title>
+    <title>Device Showcase (Inactivity Only)</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <style>
         body { 
@@ -14,8 +14,24 @@
             padding: 40px; 
             background-color: #f5f5f7;
         }
-        h1 { margin-bottom: 20px; color: #333; }
+        h1 { margin-bottom: 10px; color: #333; }
         
+        #disconnect-msg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #ff4d4f; 
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 16px;
+            z-index: 2000;
+            display: none; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
         #processing-bar {
             position: fixed;
             top: 0;
@@ -46,12 +62,20 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
+        .main-row {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+
         #video-container { 
-            width: 100%; 
-            max-width: 800px; 
+            flex-grow: 1;
             aspect-ratio: 16/9; 
             background: #000; 
-            margin-top: 20px; 
             position: relative; 
             border-radius: 12px;
             overflow: hidden;
@@ -61,21 +85,37 @@
         video, audio { width: 100%; height: 100%; object-fit: cover; }
 
         .controls { 
-            background: white; padding: 20px; border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; gap: 10px; align-items: center;
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            width: 200px; 
+            padding: 20px; 
+            background: white; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+            height: fit-content;
         }
         
         button { 
-            padding: 10px 20px; cursor: pointer; background-color: #0070f3; color: white;
-            border: none; border-radius: 4px; font-weight: 600;
+            width: 100%; 
+            padding: 15px; 
+            cursor: pointer; 
+            background-color: #0070f3; 
+            color: white;
+            border: none; 
+            border-radius: 6px; 
+            font-weight: 600;
+            transition: background 0.2s;
         }
+        button:hover:not(:disabled) { background-color: #005bb5; }
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         button#disconnectBtn { background-color: #e00; }
+        button#disconnectBtn:hover:not(:disabled) { background-color: #b00; }
         button.active-mic { background-color: #e00; }
-
+        
         .transcript-container {
             width: 100%;
-            max-width: 800px;
+            max-width: 1000px; 
             margin-top: 20px;
             background: white;
             padding: 20px;
@@ -83,7 +123,8 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 15px;
+            box-sizing: border-box;
         }
 
         .transcript-header {
@@ -94,7 +135,7 @@
 
         textarea#transcriptLog {
             width: 100%;
-            height: 300px; 
+            height: 200px; 
             padding: 15px;
             border: 1px solid #ddd;
             border-radius: 6px;
@@ -105,14 +146,14 @@
             background-color: #1e1e1e; 
             color: #0f0; 
             white-space: pre-wrap; 
+            box-sizing: border-box;
         }
 
         .input-group {
             display: flex;
             gap: 10px;
-            margin-top: 10px;
-            border-top: 1px solid #eee;
-            padding-top: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee; 
         }
         
         input#textCommand {
@@ -122,37 +163,44 @@
             border-radius: 4px;
             font-size: 14px;
         }
+
+        button#sendBtn { width: auto; }
         
-        #status { margin-top: 15px; color: #666; font-family: monospace; }
+        #status { margin-bottom: 5px; color: #666; font-family: monospace; font-size: 14px; }
     </style>
 </head>
 <body>
+
+    <div id="disconnect-msg"></div>
 
     <div id="processing-bar"></div>
     <div id="processing-text">Processing...</div>
 
     <h1>Device Showcase Virtual Coworker</h1>
-    
-    <div class="controls">
-        <button onclick="initSession()" id="connectBtn">Start & Connect</button>
-        <button onclick="toggleMic()" disabled id="micBtn">Mic On/Off</button>
-        <button onclick="disconnect()" disabled id="disconnectBtn">Disconnect</button>
-    </div>
-
     <div id="status">Ready to connect...</div>
-    <div id="video-container"></div>
+
+    <div class="main-row">
+        <div id="video-container"></div>
+        
+        <div class="controls">
+            <button onclick="initSession()" id="connectBtn">Start & Connect</button>
+            <button onclick="toggleMic()" disabled id="micBtn">Mic On/Off</button>
+            <button onclick="disconnect()" disabled id="disconnectBtn">Disconnect</button>
+        </div>
+    </div>
 
     <div class="transcript-container">
         <div class="transcript-header">
-            <h3>Debug Log & Transcript</h3>
-            <button onclick="downloadTranscript()" style="background-color:#28a745; padding:8px 16px; font-size:14px;">Download Log</button>
+            <h3>Conversation Transcript</h3>
+            <button onclick="downloadTranscript()" style="background-color:#28a745; width:auto; padding:8px 16px; font-size:14px;">Download Log</button>
         </div>
-        <textarea id="transcriptLog" readonly placeholder="System logs will appear here..."></textarea>
         
         <div class="input-group">
             <input type="text" id="textCommand" placeholder="Type a command..." onkeypress="handleInputKey(event)">
             <button onclick="sendTextCommand()" id="sendBtn" disabled>Send</button>
         </div>
+
+        <textarea id="transcriptLog" readonly placeholder="Conversation history will appear here..."></textarea>
     </div>
 
     <script>
@@ -161,7 +209,23 @@
         let agentAudioInterval = null;
         let currentSessionId = null; 
         
-        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
+        // --- TIMERS ---
+        let inactivityTimer = null; 
+        
+        let lastSentText = ""; 
+        
+        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Paid_Version_Embedded_Agent_Token_Request%20Task?bearer_token=RGmzDPwZkDXugfVrDv0VJbkTWsRG7Xvk";
+
+        // Inactivity Timer Logic (Resets on interaction)
+        function resetInactivityTimer() {
+            if (inactivityTimer) clearTimeout(inactivityTimer);
+            if (currentRoom && currentRoom.state === 'connected') {
+                inactivityTimer = setTimeout(() => {
+                    logToConsole("[SYSTEM] 30s Inactivity Timeout.");
+                    disconnect("Inactivity Timeout. Please hit \"Start & Connect\" to start a new session.");
+                }, 30000); // 30 seconds
+            }
+        }
 
         function setProcessing(isProcessing) {
             const bar = document.getElementById('processing-bar');
@@ -185,23 +249,25 @@
             }
         }
 
-        // --- UPDATED LOGGING WITH TIMESTAMPS ---
         function logToConsole(message) {
-            const log = document.getElementById('transcriptLog');
-            // Format: HH:MM:SS.mmm (High precision for debugging latency)
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('en-US', { 
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
-            }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
-
-            const entry = `[${timeString}] ${message}\n`;
-            
-            log.value += entry;
-            log.scrollTop = log.scrollHeight; 
             console.log(message);
+            const isUser = message.startsWith("[USER-INPUT]");
+            const isAgent = message.startsWith("[AI EDDIE]");
+            
+            if (isUser || isAgent) {
+                const log = document.getElementById('transcriptLog');
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                
+                let displayMsg = message;
+                if (isUser) displayMsg = message.replace("[USER-INPUT]", "User:");
+                if (isAgent) displayMsg = message.replace("[AI EDDIE]:", "Avatar:");
+                
+                displayMsg = displayMsg.replace("Sending:", "").replace("Transcribed:", "");
+                displayMsg = displayMsg.replace(/"/g, '').trim();
+
+                log.value += `[${timestamp}] ${displayMsg}\n`;
+                log.scrollTop = log.scrollHeight; 
+            }
         }
 
         function downloadTranscript() {
@@ -210,16 +276,20 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `debug_log.txt`;
+            a.download = `transcript_log.txt`;
             a.click();
         }
 
         async function initSession() {
             if (currentRoom) return;
+            
             document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnect-msg').style.display = 'none'; 
             updateStatus("Requesting Token...");
             document.getElementById('transcriptLog').value = ""; 
             currentSessionId = null; 
+            lastSentText = ""; 
+            
             logToConsole("[SYSTEM] Starting Session Init...");
 
             try {
@@ -282,7 +352,6 @@
                     try {
                         const jsonData = JSON.parse(strData);
                         
-                        // CAPTURE SESSION ID
                         if (jsonData.session_id) {
                             if (currentSessionId !== jsonData.session_id) {
                                 currentSessionId = jsonData.session_id;
@@ -290,19 +359,39 @@
                             }
                         }
 
-                        // Stop processing on ANY agent activity
                         if (jsonData.event_type && (jsonData.event_type.startsWith('avatar') || jsonData.event_type.startsWith('agent'))) {
                             setProcessing(false);
                         }
                         
                         if (jsonData.event_type === "avatar.transcription") {
                             logToConsole(`[AI EDDIE]: "${jsonData.text}"`);
+                            resetInactivityTimer(); // Interaction detected
                         }
+                        
+                        if (jsonData.event_type === "user.transcription") {
+                            if (jsonData.text === lastSentText) {
+                                console.log("[INFO] Ignored duplicate transcription echo.");
+                            } else {
+                                logToConsole(`[USER-INPUT] Transcribed: "${jsonData.text}"`);
+                            }
+                            lastSentText = ""; 
+                            resetInactivityTimer(); // Interaction detected
+                        }
+
                     } catch(e) {}
                 });
                 
-                currentRoom.on(LivekitClient.RoomEvent.Connected, () => logToConsole("[ROOM] Connected"));
-                currentRoom.on(LivekitClient.RoomEvent.Disconnected, () => logToConsole("[ROOM] Disconnected"));
+                currentRoom.on(LivekitClient.RoomEvent.Connected, () => {
+                    logToConsole("[ROOM] Connected");
+                    // Start Inactivity Timer
+                    resetInactivityTimer();
+                });
+                
+                currentRoom.on(LivekitClient.RoomEvent.Disconnected, () => {
+                    logToConsole("[ROOM] Disconnected");
+                    // Default message if disconnected manually or by server error
+                    handleDisconnectUI("Session Disconnected. Please hit \"Start & Connect\" to start a new session.");
+                });
 
                 await currentRoom.connect(url, token);
                 
@@ -344,79 +433,49 @@
                 btn.classList.remove("active-mic");
                 logToConsole("[USER] Mic Muted");
             }
+            resetInactivityTimer(); // Interaction detected
         }
 
         function handleInputKey(event) {
             if (event.key === "Enter") sendTextCommand();
         }
 
-        // --- UPDATED SEND STRATEGY (ZERO LATENCY) ---
-        // 1. HARD MUTE MIC: Forces the VAD (Voice Activity Detection) to close the 'user speaking' window instantly.
-        // 2. INTERRUPT: Clears the server-side audio buffer.
-        // 3. SEND TEXT: Dispatches the prompt immediately.
         async function sendTextCommand() {
             const inputField = document.getElementById('textCommand');
             const text = inputField.value.trim();
             if (!text || !currentRoom) return;
 
-            if (!currentSessionId) {
-                logToConsole("[WARN] No Session ID captured yet. Command might fail.");
-            }
+            resetInactivityTimer(); // Interaction detected
 
             setProcessing(true); 
+            
             logToConsole(`[USER-INPUT] Sending: "${text}"`);
+            lastSentText = text;
+
+            if (!currentSessionId) {
+                logToConsole("[WARN] No Session ID! Command may fail. Waiting for server event...");
+            }
 
             try {
-                // LATENCY FIX 1: Temporarily Mute Mic to kill background noise/VAD tail
-                const wasMicEnabled = currentRoom.localParticipant.isMicrophoneEnabled;
-                if (wasMicEnabled) {
-                    await currentRoom.localParticipant.setMicrophoneEnabled(false);
-                    logToConsole(`[SYSTEM] Mic auto-muted for latency optimization`);
-                }
-
                 const encoder = new TextEncoder();
-                const topic = "agent-control"; 
-
-                // LATENCY FIX 2: Send Interrupt to clear server queues 
-                const payloadInterrupt = JSON.stringify({ 
-                    event_type: "avatar.interrupt", 
-                    session_id: currentSessionId 
-                });
                 
-                await currentRoom.localParticipant.publishData(
-                    encoder.encode(payloadInterrupt), 
-                    { reliable: true, topic: topic }
-                );
-
-                // Small delay to ensure interrupt processes
-                await new Promise(r => setTimeout(r, 50));
-
-                // STEP 3: Send Text Response Command 
-                const payloadResponse = JSON.stringify({ 
+                const payload = JSON.stringify({ 
                     event_type: "avatar.speak_response", 
                     text: text,
-                    session_id: currentSessionId
+                    session_id: currentSessionId || "" 
                 });
 
                 await currentRoom.localParticipant.publishData(
-                    encoder.encode(payloadResponse), 
-                    { reliable: true, topic: topic }
+                    encoder.encode(payload), 
+                    { 
+                        reliable: true, 
+                        topic: "agent-control" 
+                    }
                 );
                 
-                logToConsole(`[SENT] Command: avatar.speak_response`);
-                inputField.value = "";
+                console.log(`[SENT] Topic: agent-control | Type: avatar.speak_response`);
 
-                // Restore Mic State after short delay (allowing response to start)
-                if (wasMicEnabled) {
-                    setTimeout(async () => {
-                        try {
-                            if (currentRoom) {
-                                await currentRoom.localParticipant.setMicrophoneEnabled(true);
-                                logToConsole(`[SYSTEM] Mic auto-restored`);
-                            }
-                        } catch(e) { logToConsole("[WARN] Failed to restore mic"); }
-                    }, 1000); 
-                }
+                inputField.value = "";
                 
             } catch (e) {
                 logToConsole(`[ERROR] Send Failed: ${e.message}`);
@@ -424,10 +483,11 @@
             }
         }
 
-        async function disconnect() {
-            logToConsole("[USER] Disconnecting...");
-            if (currentRoom) await currentRoom.disconnect();
+        // Updated to accept a custom message
+        function handleDisconnectUI(customMessage) {
             if (agentAudioInterval) clearInterval(agentAudioInterval);
+            if (inactivityTimer) clearTimeout(inactivityTimer);
+            
             setProcessing(false);
             document.getElementById('video-container').innerHTML = '';
             document.getElementById('disconnectBtn').disabled = true;
@@ -435,7 +495,25 @@
             document.getElementById('micBtn').classList.remove("active-mic");
             document.getElementById('micBtn').disabled = true;
             document.getElementById('connectBtn').disabled = false;
-            currentRoom = null;
+            
+            // Set dynamic message
+            const msgDiv = document.getElementById('disconnect-msg');
+            msgDiv.innerText = customMessage || "Session Disconnected. Please hit \"Start & Connect\" to start a new session.";
+            msgDiv.style.display = 'block';
+            
+            updateStatus("Disconnected");
+        }
+
+        async function disconnect(reason) {
+            logToConsole(`[USER] Disconnecting... Reason: ${reason || "Manual"}`);
+            
+            if (currentRoom) {
+                // Remove the standard listener to prevent it from overwriting our custom message
+                currentRoom.removeAllListeners(LivekitClient.RoomEvent.Disconnected);
+                await currentRoom.disconnect();
+                currentRoom = null;
+            }
+            handleDisconnectUI(reason);
         }
 
         function updateStatus(msg) {
