@@ -318,30 +318,51 @@
     </div>
 
     <script>
-        async function handleRegisterBtn() {
-            const name = document.getElementById('v_name').value.trim();
-            const email = document.getElementById('v_email').value.trim();
-            const vzid = document.getElementById('v_vzid').value.trim();
+        // Note: this original URL remains intact for the Token Request functionality and logging.
+        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
+
+        let currentRoom = null;
+        let processingTimeout = null;
+        let agentAudioInterval = null;
+        let currentSessionId = null;
+        let inactivityTimer = null; 
+        let sessionLimitTimer = null;
+        let lastSentText = ""; 
+        let currentVolume = 0.5; // Starts at 50%
+        
+        // --- NEW GLOBALS FOR USER IDENTIFICATION ---
+        let currentUserDetails = { name: "", email: "", vzid: "" };
+        let currentUserId = "Unknown User";
+
+        function captureUserDetails() {
+            currentUserDetails.name = document.getElementById('v_name').value.trim();
+            currentUserDetails.email = document.getElementById('v_email').value.trim();
+            currentUserDetails.vzid = document.getElementById('v_vzid').value.trim();
             
+            // Prefer VZID, fallback to Email, fallback to Name, fallback to Unknown
+            currentUserId = currentUserDetails.vzid || currentUserDetails.email || currentUserDetails.name || "Unknown User";
+        }
+
+        async function handleRegisterBtn() {
+            captureUserDetails();
             const registerBtn = document.getElementById('registerBtn');
 
             // Ensure at least one field is filled (or require all if you prefer)
-            if (name || email || vzid) {
+            if (currentUserDetails.name || currentUserDetails.email || currentUserDetails.vzid) {
                 // Update button text and disable it during processing
                 registerBtn.innerText = "Sending...";
                 registerBtn.disabled = true;
-
-                const postUrl = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
                 
                 // Prepare the data payload to send in the body of the POST request
                 const payload = {
-                    FullName: name,
-                    Email: email,
-                    VZID: vzid
+                    Action: "Registration",
+                    FullName: currentUserDetails.name,
+                    Email: currentUserDetails.email,
+                    VZID: currentUserDetails.vzid
                 };
                 
                 try {
-                    const response = await fetch(postUrl, {
+                    const response = await fetch(SNAPLOGIC_URL, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -363,10 +384,8 @@
 
                 } catch (error) {
                     console.error("Registration error:", error);
-                    // Failure Message
                     alert("Registration failed: There was a problem posting your request. " + error.message);
                 } finally {
-                    // Reset button
                     registerBtn.innerText = "Register";
                     registerBtn.disabled = false;
                 }
@@ -376,23 +395,15 @@
         }
 
         function closeSplashBtn() {
+            // Capture the user details before closing the splash screen
+            captureUserDetails();
+            console.log(`[SYSTEM] Session initialized by user: ${currentUserId}`);
+
             // Close the splash page
             document.getElementById('splash-screen').style.display = 'none';
             // Automatically start the connection process
             initSession();
         }
-
-        let currentRoom = null;
-        let processingTimeout = null;
-        let agentAudioInterval = null;
-        let currentSessionId = null;
-        let inactivityTimer = null; 
-        let sessionLimitTimer = null;
-        let lastSentText = ""; 
-        let currentVolume = 0.5; // Starts at 50%
-        
-        // Note: this original URL remains intact for the Token Request functionality.
-        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
 
         function changeVolume(value) {
             currentVolume = parseFloat(value);
@@ -463,6 +474,45 @@
             a.href = url;
             a.download = `transcript_log.txt`;
             a.click();
+        }
+
+        // --- NEW FUNCTION TO SEND TRANSCRIPT ON DISCONNECT ---
+        async function sendTranscriptToServer() {
+            const transcriptText = document.getElementById('transcriptLog').value;
+            
+            // Do not send if the transcript is empty
+            if (!transcriptText || !transcriptText.trim()) return;
+
+            console.log("[SYSTEM] Sending transcript to SnapLogic backend...");
+
+            const payload = {
+                Action: "LogTranscript",
+                FullName: currentUserDetails.name,
+                Email: currentUserDetails.email,
+                VZID: currentUserDetails.vzid,
+                UserId: currentUserId,
+                SessionId: currentSessionId || "Unknown",
+                Transcript: transcriptText
+            };
+
+            try {
+                // Using fetch without awaiting blockingly so it fires off seamlessly
+                fetch(SNAPLOGIC_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(response => {
+                    if (response.ok) {
+                        console.log("[SYSTEM] Transcript successfully saved to server.");
+                    } else {
+                        console.error("[ERROR] Failed to save transcript. Status:", response.status);
+                    }
+                }).catch(err => {
+                    console.error("[ERROR] Network error while saving transcript:", err);
+                });
+            } catch (error) {
+                console.error("[ERROR] Failed to initiate transcript send:", error);
+            }
         }
 
         async function initSession() {
@@ -681,6 +731,9 @@
             if (agentAudioInterval) clearInterval(agentAudioInterval);
             if (sessionLimitTimer) clearTimeout(sessionLimitTimer);
             if (inactivityTimer) clearTimeout(inactivityTimer);
+            
+            // Fire off the transcript to the server upon session termination
+            sendTranscriptToServer();
             
             // Ensure connecting overlay is hidden if a disconnect happens abruptly
             document.getElementById('connecting-overlay').style.display = 'none';
