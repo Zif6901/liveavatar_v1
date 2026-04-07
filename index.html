@@ -298,7 +298,7 @@
             
             <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 10px;">
                 <label for="volumeSlider" style="font-size: 14px; font-weight: 600; color: #333;">Volume</label>
-                <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1" oninput="changeVolume(this.value)">
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5" oninput="changeVolume(this.value)">
             </div>
         </div>
     </div>
@@ -389,7 +389,7 @@
         let inactivityTimer = null; 
         let sessionLimitTimer = null;
         let lastSentText = ""; 
-        let currentVolume = 1.0; 
+        let currentVolume = 0.5; // Starts at 50%
         
         // Note: this original URL remains intact for the Token Request functionality.
         const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
