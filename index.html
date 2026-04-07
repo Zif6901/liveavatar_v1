@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Showcase (Inactivity Only)</title>
+    <title>Device Showcase (Dual Timers)</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex; 
             flex-direction: column; 
             align-items: center; 
@@ -85,7 +85,7 @@
         video, audio { width: 100%; height: 100%; object-fit: cover; }
 
         .controls { 
-            display: flex; 
+            display: flex;
             flex-direction: column; 
             gap: 15px; 
             width: 200px; 
@@ -97,7 +97,7 @@
         }
         
         button { 
-            width: 100%; 
+            width: 100%;
             padding: 15px; 
             cursor: pointer; 
             background-color: #0070f3; 
@@ -143,7 +143,7 @@
             font-size: 12px; 
             line-height: 1.5;
             resize: vertical;
-            background-color: #1e1e1e; 
+            background-color: #1e1e1e;
             color: #0f0; 
             white-space: pre-wrap; 
             box-sizing: border-box;
@@ -167,9 +167,118 @@
         button#sendBtn { width: auto; }
         
         #status { margin-bottom: 5px; color: #666; font-family: monospace; font-size: 14px; }
+
+        /* Splash Screen Styles */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(245, 245, 247, 0.98); 
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .splash-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .splash-video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+            aspect-ratio: 16/9; 
+            object-fit: contain; 
+        }
+
+        .splash-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        /* Connecting Overlay Styles */
+        #connecting-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(245, 245, 247, 0.9);
+            z-index: 5000;
+            display: none; 
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #connecting-overlay h2 {
+            color: #0070f3;
+            margin-bottom: 20px;
+        }
+
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #0070f3;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+
+    <div id="splash-screen">
+        <div class="splash-content">
+            <h2 style="margin: 0; color: #333; font-size: 20px;">Technology Transformation and Integration Live Avatar Demo</h2>
+            
+            <video src="Live_Avatar_Demo.mp4" class="splash-video" controls playsinline></video>
+            
+            <div style="text-align: left; width: 100%;">
+                <label style="font-size: 14px; font-weight: bold; color: #333;">Transcript</label>
+                <textarea class="splash-input" style="height: 140px; resize: vertical; margin-top: 5px; background-color: #f9f9f9; font-family: inherit; line-height: 1.4;" readonly>Hi. Welcome to the technology transformation and integration live avatar demo. If this is your first time accessing this app, please provide your full name, email address, and VZID and then click the register button. We will send you a confirmation email when your access has been approved. If you have already registered, just click the go button.</textarea>
+            </div>
+            
+            <input type="text" id="v_name" class="splash-input" placeholder="Full Name">
+            <input type="email" id="v_email" class="splash-input" placeholder="Email">
+            <input type="text" id="v_vzid" class="splash-input" placeholder="VZID">
+            
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button onclick="handleRegisterBtn()" id="registerBtn" style="background-color: #28a745;">Register</button>
+                <button onclick="closeSplashBtn()">Go</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="connecting-overlay">
+        <h2>Please wait while I connect with Eddie...</h2>
+        <div class="spinner"></div>
+    </div>
 
     <div id="disconnect-msg"></div>
 
@@ -186,6 +295,11 @@
             <button onclick="initSession()" id="connectBtn">Start & Connect</button>
             <button onclick="toggleMic()" disabled id="micBtn">Mic On/Off</button>
             <button onclick="disconnect()" disabled id="disconnectBtn">Disconnect</button>
+            
+            <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 10px;">
+                <label for="volumeSlider" style="font-size: 14px; font-weight: 600; color: #333;">Volume</label>
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1" oninput="changeVolume(this.value)">
+            </div>
         </div>
     </div>
 
@@ -204,26 +318,97 @@
     </div>
 
     <script>
+        async function handleRegisterBtn() {
+            const name = document.getElementById('v_name').value.trim();
+            const email = document.getElementById('v_email').value.trim();
+            const vzid = document.getElementById('v_vzid').value.trim();
+            
+            const registerBtn = document.getElementById('registerBtn');
+
+            // Ensure at least one field is filled (or require all if you prefer)
+            if (name || email || vzid) {
+                // Update button text and disable it during processing
+                registerBtn.innerText = "Sending...";
+                registerBtn.disabled = true;
+
+                const postUrl = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
+                
+                // Prepare the data payload to send in the body of the POST request
+                const payload = {
+                    FullName: name,
+                    Email: email,
+                    VZID: vzid
+                };
+                
+                try {
+                    const response = await fetch(postUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error: ${response.status}`);
+                    }
+
+                    // Success Message
+                    alert("Registration request received! We will send you a confirmation email when your request has been approved.");
+                    
+                    // Clear fields after success
+                    document.getElementById('v_name').value = '';
+                    document.getElementById('v_email').value = '';
+                    document.getElementById('v_vzid').value = '';
+
+                } catch (error) {
+                    console.error("Registration error:", error);
+                    // Failure Message
+                    alert("Registration failed: There was a problem posting your request. " + error.message);
+                } finally {
+                    // Reset button
+                    registerBtn.innerText = "Register";
+                    registerBtn.disabled = false;
+                }
+            } else {
+                alert("Please fill in at least one field before registering.");
+            }
+        }
+
+        function closeSplashBtn() {
+            // Close the splash page
+            document.getElementById('splash-screen').style.display = 'none';
+            // Automatically start the connection process
+            initSession();
+        }
+
         let currentRoom = null;
         let processingTimeout = null;
         let agentAudioInterval = null;
-        let currentSessionId = null; 
-        
-        // --- TIMERS ---
+        let currentSessionId = null;
         let inactivityTimer = null; 
-        
+        let sessionLimitTimer = null;
         let lastSentText = ""; 
+        let currentVolume = 1.0; 
         
-        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Paid_Version_Embedded_Agent_Token_Request%20Task?bearer_token=RGmzDPwZkDXugfVrDv0VJbkTWsRG7Xvk";
+        // Note: this original URL remains intact for the Token Request functionality.
+        const SNAPLOGIC_URL = "https://tpalpb1wva002.verizon.com:8888/api/1/rest/feed/run/task/VerizonEISDev/DeliveryAssurance/shared/Embedded_Agent_Token_Request%20Task_Gnd?bearer_token=8tn6rpItp0F8RIYNNGq2LECBvdi9is2X";
 
-        // Inactivity Timer Logic (Resets on interaction)
+        function changeVolume(value) {
+            currentVolume = parseFloat(value);
+            const mediaElements = document.querySelectorAll('#video-container audio, #video-container video');
+            mediaElements.forEach(el => {
+                el.volume = currentVolume;
+            });
+        }
+
         function resetInactivityTimer() {
             if (inactivityTimer) clearTimeout(inactivityTimer);
             if (currentRoom && currentRoom.state === 'connected') {
                 inactivityTimer = setTimeout(() => {
                     logToConsole("[SYSTEM] 30s Inactivity Timeout.");
                     disconnect("Inactivity Timeout. Please hit \"Start & Connect\" to start a new session.");
-                }, 30000); // 30 seconds
+                }, 30000);
             }
         }
 
@@ -283,6 +468,9 @@
         async function initSession() {
             if (currentRoom) return;
             
+            // Show the connecting overlay
+            document.getElementById('connecting-overlay').style.display = 'flex';
+            
             document.getElementById('connectBtn').disabled = true;
             document.getElementById('disconnect-msg').style.display = 'none'; 
             updateStatus("Requesting Token...");
@@ -291,7 +479,6 @@
             lastSentText = ""; 
             
             logToConsole("[SYSTEM] Starting Session Init...");
-
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (AudioContext) {
@@ -304,15 +491,12 @@
                 if (!slResponse.ok) throw new Error("SnapLogic Error: " + slResponse.status);
                 const slData = await slResponse.json();
                 const sessionToken = slData[0]?.session_token;
-                
                 if (!sessionToken) throw new Error("No session token.");
                 logToConsole("[SYSTEM] Token Received. Calling Avatar API...");
-
                 const response = await fetch('https://api.liveavatar.com/v1/sessions/start', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + sessionToken, 'Accept': 'application/json' }
                 });
-
                 if (!response.ok) throw new Error("Avatar API Error: " + response.status);
                 const data = await response.json();
                 const innerData = data.data || data; 
@@ -320,6 +504,8 @@
                 await connectToLiveKit(innerData.livekit_url, innerData.livekit_client_token);
 
             } catch (error) {
+                // Hide the connecting overlay if an error occurs
+                document.getElementById('connecting-overlay').style.display = 'none';
                 logToConsole(`[ERROR] Init Failed: ${error.message}`);
                 updateStatus("Error: " + error.message);
                 document.getElementById('connectBtn').disabled = false;
@@ -330,12 +516,15 @@
             updateStatus("Connecting to Room...");
             try {
                 currentRoom = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
-
+                
                 currentRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                    document.getElementById('video-container').appendChild(track.attach());
+                    const element = track.attach();
+                    element.volume = currentVolume; // Apply the slider's current volume
+                    document.getElementById('video-container').appendChild(element);
+                    
                     logToConsole(`[ROOM] Track Subscribed: ${track.kind}`);
+                    
                     if (track.kind === LivekitClient.Track.Kind.Audio) {
-                        const element = track.attach();
                         element.onplay = () => {
                             logToConsole("[AUDIO] Agent audio started playing.");
                             setProcessing(false);
@@ -343,7 +532,7 @@
                         startAgentAudioMonitoring(participant);
                     }
                 });
-
+                
                 currentRoom.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
                     const decoder = new TextDecoder();
                     const strData = decoder.decode(payload);
@@ -365,7 +554,7 @@
                         
                         if (jsonData.event_type === "avatar.transcription") {
                             logToConsole(`[AI EDDIE]: "${jsonData.text}"`);
-                            resetInactivityTimer(); // Interaction detected
+                            resetInactivityTimer();
                         }
                         
                         if (jsonData.event_type === "user.transcription") {
@@ -374,8 +563,8 @@
                             } else {
                                 logToConsole(`[USER-INPUT] Transcribed: "${jsonData.text}"`);
                             }
-                            lastSentText = ""; 
-                            resetInactivityTimer(); // Interaction detected
+                            lastSentText = "";
+                            resetInactivityTimer(); 
                         }
 
                     } catch(e) {}
@@ -383,13 +572,21 @@
                 
                 currentRoom.on(LivekitClient.RoomEvent.Connected, () => {
                     logToConsole("[ROOM] Connected");
-                    // Start Inactivity Timer
                     resetInactivityTimer();
+                    
+                    // Hide the connecting overlay once successfully connected
+                    document.getElementById('connecting-overlay').style.display = 'none';
+             
+                    if (sessionLimitTimer) clearTimeout(sessionLimitTimer);
+                    logToConsole("[SYSTEM] 300s Demo Timer Started");
+                    sessionLimitTimer = setTimeout(() => {
+                        logToConsole("[SYSTEM] 300s Demo Limit Reached.");
+                        disconnect("This demo version has a 5 minute timeout. Please hit \"Start & Connect\" to start a new session.");
+                    }, 300000); 
                 });
                 
                 currentRoom.on(LivekitClient.RoomEvent.Disconnected, () => {
                     logToConsole("[ROOM] Disconnected");
-                    // Default message if disconnected manually or by server error
                     handleDisconnectUI("Session Disconnected. Please hit \"Start & Connect\" to start a new session.");
                 });
 
@@ -398,7 +595,6 @@
                 document.getElementById('disconnectBtn').disabled = false;
                 document.getElementById('micBtn').disabled = false;
                 document.getElementById('sendBtn').disabled = false;
-
                 try {
                     await currentRoom.localParticipant.setMicrophoneEnabled(true);
                     document.getElementById('micBtn').classList.add("active-mic");
@@ -408,6 +604,8 @@
                 }
 
             } catch (error) {
+                // Hide the connecting overlay if an error occurs
+                document.getElementById('connecting-overlay').style.display = 'none';
                 logToConsole(`[ERROR] Connection Failed: ${error.message}`);
                 document.getElementById('connectBtn').disabled = false;
             }
@@ -433,7 +631,7 @@
                 btn.classList.remove("active-mic");
                 logToConsole("[USER] Mic Muted");
             }
-            resetInactivityTimer(); // Interaction detected
+            resetInactivityTimer();
         }
 
         function handleInputKey(event) {
@@ -445,8 +643,7 @@
             const text = inputField.value.trim();
             if (!text || !currentRoom) return;
 
-            resetInactivityTimer(); // Interaction detected
-
+            resetInactivityTimer();
             setProcessing(true); 
             
             logToConsole(`[USER-INPUT] Sending: "${text}"`);
@@ -458,13 +655,11 @@
 
             try {
                 const encoder = new TextEncoder();
-                
                 const payload = JSON.stringify({ 
                     event_type: "avatar.speak_response", 
                     text: text,
                     session_id: currentSessionId || "" 
                 });
-
                 await currentRoom.localParticipant.publishData(
                     encoder.encode(payload), 
                     { 
@@ -472,7 +667,6 @@
                         topic: "agent-control" 
                     }
                 );
-                
                 console.log(`[SENT] Topic: agent-control | Type: avatar.speak_response`);
 
                 inputField.value = "";
@@ -483,10 +677,13 @@
             }
         }
 
-        // Updated to accept a custom message
         function handleDisconnectUI(customMessage) {
             if (agentAudioInterval) clearInterval(agentAudioInterval);
+            if (sessionLimitTimer) clearTimeout(sessionLimitTimer);
             if (inactivityTimer) clearTimeout(inactivityTimer);
+            
+            // Ensure connecting overlay is hidden if a disconnect happens abruptly
+            document.getElementById('connecting-overlay').style.display = 'none';
             
             setProcessing(false);
             document.getElementById('video-container').innerHTML = '';
@@ -496,7 +693,6 @@
             document.getElementById('micBtn').disabled = true;
             document.getElementById('connectBtn').disabled = false;
             
-            // Set dynamic message
             const msgDiv = document.getElementById('disconnect-msg');
             msgDiv.innerText = customMessage || "Session Disconnected. Please hit \"Start & Connect\" to start a new session.";
             msgDiv.style.display = 'block';
@@ -506,9 +702,7 @@
 
         async function disconnect(reason) {
             logToConsole(`[USER] Disconnecting... Reason: ${reason || "Manual"}`);
-            
             if (currentRoom) {
-                // Remove the standard listener to prevent it from overwriting our custom message
                 currentRoom.removeAllListeners(LivekitClient.RoomEvent.Disconnected);
                 await currentRoom.disconnect();
                 currentRoom = null;
